@@ -13,6 +13,8 @@ export default function TestDetailsPage() {
     const [students, setStudents] = useState([]);
     const [assignedStudentIds, setAssignedStudentIds] = useState([]);
     const [selectedYear, setSelectedYear] = useState("");
+    const [selectedBranch, setSelectedBranch] = useState("");
+    const [selectedSection, setSelectedSection] = useState("");
 
     useEffect(() => {
         const loadTest = async () => {
@@ -21,13 +23,15 @@ export default function TestDetailsPage() {
             setTest(data);
         };
 
-        const loadStudents = async () => {
-            const res = await fetch(`${baseUrl}/students`);
+        const loadStudents = async (params = {}) => {
+            const query = new URLSearchParams(params).toString();
+            const res = await fetch(`${baseUrl}/students${query ? `?${query}` : ""}`);
             const data = await res.json();
             setStudents(data);
         };
 
         loadTest();
+        // initial load - all students
         loadStudents();
     }, [testId]);
 
@@ -71,10 +75,17 @@ export default function TestDetailsPage() {
     };
 
     const toggleAllStudents = () => {
-        if (assignedStudentIds.length === students.length) {
-            setAssignedStudentIds([]);
+        const visible = selectedYear ? (studentsByYear[selectedYear] || [])
+            .filter(s => !selectedBranch || s.branch === selectedBranch)
+            .filter(s => !selectedSection || s.section === selectedSection) : [];
+        if (assignedStudentIds.length === visible.length) {
+            // remove visible students from selection
+            const visibleIds = new Set(visible.map(s => s._id));
+            setAssignedStudentIds(prev => prev.filter(id => !visibleIds.has(id)));
         } else {
-            setAssignedStudentIds(students.map((s) => s._id));
+            // add all visible students (union)
+            const visibleIds = visible.map(s => s._id);
+            setAssignedStudentIds(prev => Array.from(new Set([...prev, ...visibleIds])));
         }
     };
 
@@ -200,39 +211,76 @@ export default function TestDetailsPage() {
                     <div className="flex items-center space-x-2">
                         <input
                             type="checkbox"
-                            checked={
-                                selectedYear &&
-                                studentsByYear[selectedYear]?.length > 0 &&
-                                assignedStudentIds.length === studentsByYear[selectedYear].length
-                            }
+                            checked={(() => {
+                                const visible = selectedYear ? (studentsByYear[selectedYear] || [])
+                                    .filter(s => !selectedBranch || s.branch === selectedBranch)
+                                    .filter(s => !selectedSection || s.section === selectedSection) : [];
+                                return visible.length > 0 && visible.every(s => assignedStudentIds.includes(s._id));
+                            })()}
                             onChange={toggleAllStudents}
+                            disabled={!selectedYear}
                         />
                         <label className="font-medium">Select All Students</label>
                     </div>
 
-                    <div>
-                        <label className="block font-medium mb-1">Select Year</label>
-                        <select
-                            value={selectedYear}
-                            onChange={(e) => setSelectedYear(e.target.value)}
-                            className="border rounded px-3 py-2"
-                        >
-                            <option value="">-- Select Year --</option>
-                            {Object.keys(studentsByYear)
-                                .sort((a, b) => b - a)
-                                .map((year) => (
-                                    <option key={year} value={year}>
-                                        {year}
-                                    </option>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block font-medium mb-1">Select Year</label>
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(e.target.value)}
+                                className="border rounded px-3 py-2 w-full"
+                            >
+                                <option value="">-- Select Year --</option>
+                                {Object.keys(studentsByYear)
+                                    .sort((a, b) => b - a)
+                                    .map((year) => (
+                                        <option key={year} value={year}>
+                                            {year}
+                                        </option>
+                                    ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block font-medium mb-1">Filter by Branch</label>
+                            <select
+                                value={selectedBranch}
+                                onChange={(e) => setSelectedBranch(e.target.value)}
+                                className="border rounded px-3 py-2 w-full"
+                                disabled={!selectedYear}
+                            >
+                                <option value="">All Branches</option>
+                                {selectedYear && Array.from(new Set((studentsByYear[selectedYear] || []).map(s => s.branch))).map(branch => (
+                                    <option key={branch} value={branch}>{branch}</option>
                                 ))}
-                        </select>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block font-medium mb-1">Filter by Section</label>
+                            <select
+                                value={selectedSection}
+                                onChange={(e) => setSelectedSection(e.target.value)}
+                                className="border rounded px-3 py-2 w-full"
+                                disabled={!selectedYear}
+                            >
+                                <option value="">All Sections</option>
+                                {selectedYear && Array.from(new Set((studentsByYear[selectedYear] || [])
+                                    .filter(s => !selectedBranch || s.branch === selectedBranch)
+                                    .map(s => s.section))).map(section => (
+                                        <option key={section} value={section}>{section}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
                     {selectedYear && studentsByYear[selectedYear] && (
                         <div className="space-y-6">
                             <h2 className="text-lg font-semibold">{selectedYear} Year</h2>
                             <ul className="space-y-2">
-                                {studentsByYear[selectedYear].map((student) => (
+                                {studentsByYear[selectedYear]
+                                    .filter(s => !selectedBranch || s.branch === selectedBranch)
+                                    .filter(s => !selectedSection || s.section === selectedSection)
+                                    .map((student) => (
                                     <li key={student._id} className="flex items-center space-x-2">
                                         <input
                                             type="checkbox"
@@ -240,7 +288,7 @@ export default function TestDetailsPage() {
                                             onChange={() => toggleStudent(student._id)}
                                         />
                                         <span>
-                                            {student.name} ({student.email})
+                                            {student.name} ({student.email}) - {student.branch}-{student.section}
                                         </span>
                                     </li>
                                 ))}
