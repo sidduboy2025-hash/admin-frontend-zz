@@ -1,9 +1,9 @@
 // API Configuration - Single source of truth for all API endpoints
 export const API_CONFIG = {
-  BASE_URL: 'http://172.168.0.24:4001',
-    BASE_URL: 'http://192.168.0.100:4001',
+  BASE_URL: 'http://172.168.0.24:4002',
+    BASE_URL: 'http://192.168.0.100:4002',
 
-      BASE_URL: 'http://localhost:4001',
+      BASE_URL: 'http://localhost:4002',
 
   API_VERSION: '/api',
   
