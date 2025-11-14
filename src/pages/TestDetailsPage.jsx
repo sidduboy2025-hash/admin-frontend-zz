@@ -15,6 +15,7 @@ export default function TestDetailsPage() {
     const [selectedYear, setSelectedYear] = useState("");
     const [selectedBranch, setSelectedBranch] = useState("");
     const [selectedSection, setSelectedSection] = useState("");
+    const [assignmentMode, setAssignmentMode] = useState("individual"); // "individual" or "criteria"
 
     useEffect(() => {
         const loadTest = async () => {
@@ -103,19 +104,46 @@ export default function TestDetailsPage() {
         }
 
         try {
-            const res = await fetch(`${baseUrl}/tests/${testId}/assign`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    studentIds: assignedStudentIds,
+            if (assignmentMode === "criteria") {
+                // Use the new bulk assignment by criteria endpoint
+                const requestBody = {
                     year: parseInt(selectedYear),
-                }),
-            });
+                };
 
-            if (res.ok) {
-                alert("Students assigned successfully.");
+                if (selectedBranch) requestBody.branch = selectedBranch;
+                if (selectedSection) requestBody.section = selectedSection;
+
+                const res = await fetch(`${baseUrl}/tests/${testId}/assign-by-criteria`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(requestBody),
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    alert(`Successfully assigned test to ${data.modifiedCount} students!\n\nCriteria:\n- Year: ${data.criteria.year}\n- Branch: ${data.criteria.branch}\n- Section: ${data.criteria.section}`);
+                } else {
+                    const errorData = await res.json();
+                    alert(`Failed to assign students: ${errorData.message}`);
+                }
             } else {
-                alert("Failed to assign students.");
+                // Use the original individual assignment endpoint
+                const res = await fetch(`${baseUrl}/tests/${testId}/assign`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        studentIds: assignedStudentIds,
+                        year: parseInt(selectedYear),
+                    }),
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    alert(`Successfully assigned test to ${data.modifiedCount} individual students.`);
+                } else {
+                    const errorData = await res.json();
+                    alert(`Failed to assign students: ${errorData.message}`);
+                }
             }
         } catch (err) {
             console.error(err);
@@ -208,20 +236,54 @@ export default function TestDetailsPage() {
             {/* Tab: Assign Students */}
             {activeTab === "Assign Students" && (
                 <div className="space-y-6">
-                    <div className="flex items-center space-x-2">
-                        <input
-                            type="checkbox"
-                            checked={(() => {
-                                const visible = selectedYear ? (studentsByYear[selectedYear] || [])
-                                    .filter(s => !selectedBranch || s.branch === selectedBranch)
-                                    .filter(s => !selectedSection || s.section === selectedSection) : [];
-                                return visible.length > 0 && visible.every(s => assignedStudentIds.includes(s._id));
-                            })()}
-                            onChange={toggleAllStudents}
-                            disabled={!selectedYear}
-                        />
-                        <label className="font-medium">Select All Students</label>
+                    {/* Assignment Mode Selection */}
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                        <h3 className="text-lg font-semibold mb-3">Assignment Mode</h3>
+                        <div className="flex space-x-4">
+                            <label className="flex items-center space-x-2">
+                                <input
+                                    type="radio"
+                                    value="criteria"
+                                    checked={assignmentMode === "criteria"}
+                                    onChange={(e) => setAssignmentMode(e.target.value)}
+                                    className="form-radio"
+                                />
+                                <span>Assign by Criteria (Bulk Assignment)</span>
+                            </label>
+                            <label className="flex items-center space-x-2">
+                                <input
+                                    type="radio"
+                                    value="individual"
+                                    checked={assignmentMode === "individual"}
+                                    onChange={(e) => setAssignmentMode(e.target.value)}
+                                    className="form-radio"
+                                />
+                                <span>Individual Selection</span>
+                            </label>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-2">
+                            {assignmentMode === "criteria" 
+                                ? "Assigns test to all students matching the selected year, branch, and section criteria." 
+                                : "Select individual students from the list below."}
+                        </p>
                     </div>
+
+                    {assignmentMode === "individual" && (
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                checked={(() => {
+                                    const visible = selectedYear ? (studentsByYear[selectedYear] || [])
+                                        .filter(s => !selectedBranch || s.branch === selectedBranch)
+                                        .filter(s => !selectedSection || s.section === selectedSection) : [];
+                                    return visible.length > 0 && visible.every(s => assignedStudentIds.includes(s._id));
+                                })()}
+                                onChange={toggleAllStudents}
+                                disabled={!selectedYear}
+                            />
+                            <label className="font-medium">Select All Visible Students</label>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
@@ -273,10 +335,11 @@ export default function TestDetailsPage() {
                         </div>
                     </div>
 
-                    {selectedYear && studentsByYear[selectedYear] && (
+                    {/* Individual Student Selection (only show in individual mode) */}
+                    {assignmentMode === "individual" && selectedYear && studentsByYear[selectedYear] && (
                         <div className="space-y-6">
-                            <h2 className="text-lg font-semibold">{selectedYear} Year</h2>
-                            <ul className="space-y-2">
+                            <h2 className="text-lg font-semibold">{selectedYear} Year Students</h2>
+                            <ul className="space-y-2 max-h-96 overflow-y-auto border rounded-lg p-4">
                                 {studentsByYear[selectedYear]
                                     .filter(s => !selectedBranch || s.branch === selectedBranch)
                                     .filter(s => !selectedSection || s.section === selectedSection)
@@ -293,14 +356,39 @@ export default function TestDetailsPage() {
                                     </li>
                                 ))}
                             </ul>
+                            <p className="text-sm text-gray-600">
+                                Selected: {assignedStudentIds.length} students
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Criteria Summary (show in criteria mode) */}
+                    {assignmentMode === "criteria" && selectedYear && (
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                            <h3 className="font-semibold text-blue-900 mb-2">Assignment Criteria Summary</h3>
+                            <ul className="text-blue-800 space-y-1">
+                                <li><strong>Year:</strong> {selectedYear}</li>
+                                <li><strong>Branch:</strong> {selectedBranch || "All branches"}</li>
+                                <li><strong>Section:</strong> {selectedSection || "All sections"}</li>
+                            </ul>
+                            <p className="text-sm text-blue-700 mt-2">
+                                This will assign the test to all students matching these criteria.
+                            </p>
                         </div>
                     )}
 
                     <button
-                        className="px-4 py-2 bg-blue-600 text-white rounded"
+                        className={`px-6 py-3 text-white rounded-lg font-medium ${
+                            assignmentMode === "criteria" 
+                                ? "bg-green-600 hover:bg-green-700" 
+                                : "bg-blue-600 hover:bg-blue-700"
+                        } disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors`}
                         onClick={handleAssignStudents}
+                        disabled={!selectedYear || (assignmentMode === "individual" && assignedStudentIds.length === 0)}
                     >
-                        Assign Students
+                        {assignmentMode === "criteria" 
+                            ? "Assign Test by Criteria" 
+                            : `Assign Test to ${assignedStudentIds.length} Selected Students`}
                     </button>
                 </div>
             )}
