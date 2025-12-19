@@ -13,11 +13,11 @@ export default defineConfig({
       plugins: [react(), tailwindcss(),],
 
   server: {
-    // host: '192.168.0.24',
+    host: '117.250.212.182',
     port: 5176,
     strictPort: true,
     hmr: {
-      host: '192.168.0.24',
+      host: '117.250.212.182',
       port: 5176
     }
   }
